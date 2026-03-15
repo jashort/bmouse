@@ -10,41 +10,62 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	if len(os.Args) < 2 {
 		printUsage()
-		os.Exit(1)
+		return fmt.Errorf("no command specified")
 	}
 
 	cmd := os.Args[1]
 
 	if cmd == "list" {
 		internal.ListRazerDevices()
-		return
+		return nil
 	}
 
 	dev, err := internal.Open()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(1)
+		return err
 	}
 	defer dev.Close()
 
 	// Parse optional --zone flag (default "all").
-	zones, rest := parseZone(os.Args[2:])
+	zones, rest, err := parseZone(os.Args[2:])
+	if err != nil {
+		return err
+	}
 
 	switch cmd {
 	case "static":
-		r, g, b := parseColor(rest, cmd)
-		applyZones(dev, zones, func(z byte) error { return dev.SetStatic(z, r, g, b) })
+		r, g, b, err := parseColor(rest, cmd)
+		if err != nil {
+			return err
+		}
+		if err := applyZones(zones, func(z byte) error { return dev.SetStatic(z, r, g, b) }); err != nil {
+			return err
+		}
 		fmt.Printf("Static #%02X%02X%02X\n", r, g, b)
 
 	case "breathe", "breathing":
-		r, g, b := parseColor(rest, cmd)
-		applyZones(dev, zones, func(z byte) error { return dev.SetBreathing(z, r, g, b) })
+		r, g, b, err := parseColor(rest, cmd)
+		if err != nil {
+			return err
+		}
+		if err := applyZones(zones, func(z byte) error { return dev.SetBreathing(z, r, g, b) }); err != nil {
+			return err
+		}
 		fmt.Printf("Breathing #%02X%02X%02X\n", r, g, b)
 
 	case "spectrum", "rainbow":
-		applyZones(dev, zones, func(z byte) error { return dev.SetSpectrum(z) })
+		if err := applyZones(zones, func(z byte) error { return dev.SetSpectrum(z) }); err != nil {
+			return err
+		}
 		fmt.Println("Spectrum cycling")
 
 	case "wave":
@@ -54,36 +75,54 @@ func main() {
 				dir = 2
 			}
 		}
-		applyZones(dev, zones, func(z byte) error { return dev.SetWave(z, dir) })
+		if err := applyZones(zones, func(z byte) error { return dev.SetWave(z, dir) }); err != nil {
+			return err
+		}
 		fmt.Println("Wave effect")
 
 	case "reactive":
-		r, g, b := parseColor(rest, cmd)
+		r, g, b, err := parseColor(rest, cmd)
+		if err != nil {
+			return err
+		}
 		speed := byte(2) // medium
-		applyZones(dev, zones, func(z byte) error { return dev.SetReactive(z, speed, r, g, b) })
+		if err := applyZones(zones, func(z byte) error { return dev.SetReactive(z, speed, r, g, b) }); err != nil {
+			return err
+		}
 		fmt.Printf("Reactive #%02X%02X%02X\n", r, g, b)
 
 	case "off":
-		applyZones(dev, zones, func(z byte) error { return dev.SetOff(z) })
+		if err := applyZones(zones, func(z byte) error { return dev.SetOff(z) }); err != nil {
+			return err
+		}
 		fmt.Println("LEDs off")
 
 	case "brightness":
 		if len(rest) == 0 {
 			for _, z := range internal.ZoneEach {
 				b, err := dev.GetBrightness(z)
-				exitOn(err)
+				if err != nil {
+					return err
+				}
 				fmt.Printf("Zone 0x%02X brightness: %d/255\n", z, b)
 			}
 		} else {
-			val := mustInt(rest[0], "brightness value 0-255")
-			applyZones(dev, zones, func(z byte) error { return dev.SetBrightness(z, byte(val)) })
+			val, err := parseInt(rest[0], "brightness value 0-255")
+			if err != nil {
+				return err
+			}
+			if err := applyZones(zones, func(z byte) error { return dev.SetBrightness(z, byte(val)) }); err != nil {
+				return err
+			}
 			fmt.Printf("Brightness set to %d\n", val)
 		}
 
 	case "scroll":
 		if len(rest) == 0 {
 			mode, err := dev.GetScrollMode()
-			exitOn(err)
+			if err != nil {
+				return err
+			}
 			names := map[byte]string{
 				internal.ScrollTactile:   "tactile",
 				internal.ScrollFreeSpin:  "free-spin",
@@ -98,18 +137,20 @@ func main() {
 			modeName := strings.ToLower(rest[0])
 			mode, ok := internal.ScrollModeByName[modeName]
 			if !ok {
-				fmt.Fprintf(os.Stderr, "Unknown scroll mode %q (valid: tactile, free, smart)\n", modeName)
-				os.Exit(1)
+				return fmt.Errorf("unknown scroll mode %q (valid: tactile, free, smart)", modeName)
 			}
-			exitOn(dev.SetScrollMode(mode))
+			if err := dev.SetScrollMode(mode); err != nil {
+				return err
+			}
 			fmt.Printf("Scroll mode set to %s\n", modeName)
 		}
 
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", cmd)
 		printUsage()
-		os.Exit(1)
+		return fmt.Errorf("unknown command: %s", cmd)
 	}
+
+	return nil
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -152,60 +193,52 @@ Examples:
   bmouse scroll smart`)
 }
 
-func parseZone(args []string) ([]byte, []string) {
+func parseZone(args []string) ([]byte, []string, error) {
 	for i, a := range args {
 		if a == "--zone" && i+1 < len(args) {
 			name := strings.ToLower(args[i+1])
 			z, ok := internal.ZoneByName[name]
 			if !ok {
-				fmt.Fprintf(os.Stderr, "Unknown zone %q (valid: all, scroll, logo, under)\n", name)
-				os.Exit(1)
+				return nil, nil, fmt.Errorf("unknown zone %q (valid: all, scroll, logo, under)", name)
 			}
 			rest := append(args[:i], args[i+2:]...)
-			return []byte{z}, rest
+			return []byte{z}, rest, nil
 		}
 	}
-	return nil, args // nil means "all"
+	return nil, args, nil // nil zones means "all"
 }
 
-func parseColor(args []string, cmdName string) (r, g, b byte) {
+func parseColor(args []string, cmdName string) (r, g, b byte, err error) {
 	if len(args) == 0 {
-		fmt.Fprintf(os.Stderr, "%s requires a hex colour argument (e.g. ff0000)\n", cmdName)
-		os.Exit(1)
+		return 0, 0, 0, fmt.Errorf("%s requires a hex colour argument (e.g. ff0000)", cmdName)
 	}
 	hex := strings.TrimPrefix(args[0], "#")
 	if len(hex) != 6 {
-		fmt.Fprintf(os.Stderr, "Invalid colour %q — expected 6-digit hex (e.g. ff0000)\n", args[0])
-		os.Exit(1)
+		return 0, 0, 0, fmt.Errorf("invalid colour %q — expected 6-digit hex (e.g. ff0000)", args[0])
 	}
 	rv, _ := strconv.ParseUint(hex[0:2], 16, 8)
 	gv, _ := strconv.ParseUint(hex[2:4], 16, 8)
 	bv, _ := strconv.ParseUint(hex[4:6], 16, 8)
-	return byte(rv), byte(gv), byte(bv)
+	return byte(rv), byte(gv), byte(bv), nil
 }
 
-func mustInt(s, label string) int {
+func parseInt(s, label string) (int, error) {
 	v, err := strconv.Atoi(s)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid %s: %q\n", label, s)
-		os.Exit(1)
+		return 0, fmt.Errorf("invalid %s: %q", label, s)
 	}
-	return v
-}
-
-func exitOn(err error) {
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(1)
-	}
+	return v, nil
 }
 
 // applyZones applies fn to each zone. If zones is nil, uses ZoneAll (0x00).
-func applyZones(dev *internal.Device, zones []byte, fn func(byte) error) {
+func applyZones(zones []byte, fn func(byte) error) error {
 	if zones == nil {
 		zones = []byte{internal.ZoneAll}
 	}
 	for _, z := range zones {
-		exitOn(fn(z))
+		if err := fn(z); err != nil {
+			return err
+		}
 	}
+	return nil
 }
