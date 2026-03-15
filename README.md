@@ -2,6 +2,8 @@
 
 A command-line tool for controlling the RGB lighting and scroll wheel mode on Razer Basilisk V3 mice via direct USB HID — no Razer drivers or Synapse required.
 
+[Demo](https://github.com/user-attachments/assets/8502f784-ff05-4f9f-9947-c9e7cd181305)
+
 ## Supported Devices
 
 Tested with: Razer Basilisk V3 Pro (Wireless), plugged in via USB.
