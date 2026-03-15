@@ -25,8 +25,24 @@ func run() error {
 	cmd := os.Args[1]
 
 	if cmd == "list" {
-		err := internal.ListRazerDevices()
-		return err
+		devices, err := internal.ListRazerDevices()
+		if err != nil {
+			return err
+		}
+		if len(devices) == 0 {
+			fmt.Println("(none found – is a Razer device plugged in?)")
+			return nil
+		}
+		fmt.Println("Razer HID devices:")
+		for _, info := range devices {
+			name := info.ProductStr
+			if name == "" {
+				name = "(unnamed)"
+			}
+			fmt.Printf("  PID=0x%04X  %-30s  UsagePage=0x%04X  Usage=0x%04X  Interface=%d  Path=%s\n",
+				info.ProductID, name, info.UsagePage, info.Usage, info.InterfaceNbr, info.Path)
+		}
+		return nil
 	}
 
 	dev, err := internal.Open()

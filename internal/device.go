@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/sstallion/go-hid"
@@ -19,13 +18,18 @@ const (
 	PIDBasiliskV3XBT     = 0x00AD
 )
 
-// knownNames maps product IDs to human-readable names.
-var knownNames = map[uint16]string{
-	PIDBasiliskV3:        "Basilisk V3",
-	PIDBasiliskV3Pro:     "Basilisk V3 Pro (Wired)",
-	PIDBasiliskV3ProWL:   "Basilisk V3 Pro (Wireless)",
-	PIDBasiliskV3XHSpeed: "Basilisk V3 X HyperSpeed",
-	PIDBasiliskV3XBT:     "Basilisk V3 X BT",
+// knownDevices is the single source of truth for supported PIDs and their
+// human-readable names. Open iterates this slice in order; to add support
+// for a new variant, add one entry here (and a PID constant above).
+var knownDevices = []struct {
+	pid  uint16
+	name string
+}{
+	{PIDBasiliskV3, "Basilisk V3"},
+	{PIDBasiliskV3Pro, "Basilisk V3 Pro (Wired)"},
+	{PIDBasiliskV3ProWL, "Basilisk V3 Pro (Wireless)"},
+	{PIDBasiliskV3XHSpeed, "Basilisk V3 X HyperSpeed"},
+	{PIDBasiliskV3XBT, "Basilisk V3 X BT"},
 }
 
 // Device wraps an opened HID handle to a Razer mouse.
@@ -41,16 +45,8 @@ func Open() (*Device, error) {
 		return nil, fmt.Errorf("hid init: %w", err)
 	}
 
-	pids := []uint16{
-		PIDBasiliskV3,
-		PIDBasiliskV3Pro,
-		PIDBasiliskV3ProWL,
-		PIDBasiliskV3XHSpeed,
-		PIDBasiliskV3XBT,
-	}
-
-	for _, pid := range pids {
-		d, err := openPID(pid)
+	for _, kd := range knownDevices {
+		d, err := openPID(kd.pid)
 		if err == nil {
 			return d, nil
 		}
@@ -83,9 +79,12 @@ func openPID(pid uint16) (*Device, error) {
 		return nil, fmt.Errorf("open 0x%04X: %w", pid, err)
 	}
 
-	name := knownNames[pid]
-	if name == "" {
-		name = fmt.Sprintf("Razer 0x%04X", pid)
+	name := fmt.Sprintf("Razer 0x%04X", pid)
+	for _, kd := range knownDevices {
+		if kd.pid == pid {
+			name = kd.name
+			break
+		}
 	}
 	return &Device{hid: h, ProductID: pid, Name: name}, nil
 }
@@ -103,35 +102,20 @@ func (d *Device) Send(pkt Packet) (Packet, error) {
 	return sendCommand(d.hid, pkt)
 }
 
-// ListRazerDevices prints every Razer HID interface visible on the system.
+// ListRazerDevices returns every Razer HID interface visible on the system.
 // Useful for finding the correct product ID.
-func ListRazerDevices() error {
-	var err error
-	if err = hid.Init(); err != nil {
-		fmt.Println("hid init error:", err)
-		return err
+func ListRazerDevices() ([]hid.DeviceInfo, error) {
+	if err := hid.Init(); err != nil {
+		return nil, fmt.Errorf("hid init: %w", err)
 	}
-	defer func() {
-		err = errors.Join(hid.Exit())
-	}()
+	defer hid.Exit()
 
-	fmt.Println("Razer HID devices:")
-	found := false
-	err = hid.Enumerate(VendorID, 0x0000, func(info *hid.DeviceInfo) error {
-		found = true
-		name := info.ProductStr
-		if name == "" {
-			name = "(unnamed)"
-		}
-		fmt.Printf("  PID=0x%04X  %-30s  UsagePage=0x%04X  Usage=0x%04X  Interface=%d  Path=%s\n",
-			info.ProductID, name, info.UsagePage, info.Usage, info.InterfaceNbr, info.Path)
+	var devices []hid.DeviceInfo
+	if err := hid.Enumerate(VendorID, 0x0000, func(info *hid.DeviceInfo) error {
+		devices = append(devices, *info)
 		return nil
-	})
-	if err != nil {
-		return err
+	}); err != nil {
+		return nil, fmt.Errorf("enumerate: %w", err)
 	}
-	if !found {
-		fmt.Println("  (none found – is a Razer device plugged in?)")
-	}
-	return nil
+	return devices, nil
 }
