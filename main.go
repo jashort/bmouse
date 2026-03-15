@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -16,7 +17,7 @@ func main() {
 	}
 }
 
-func run() error {
+func run() (err error) {
 	if len(os.Args) < 2 {
 		printUsage()
 		return fmt.Errorf("no command specified")
@@ -49,7 +50,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer dev.Close()
+	defer func() {
+		err = errors.Join(err, dev.Close())
+	}()
 
 	// Parse optional --zone flag (default "all").
 	zones, rest, err := parseZone(os.Args[2:])

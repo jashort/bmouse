@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/sstallion/go-hid"
@@ -90,11 +91,12 @@ func openPID(pid uint16) (*Device, error) {
 }
 
 // Close releases the HID handle.
-func (d *Device) Close() {
+func (d *Device) Close() error {
+	var closeErr error
 	if d.hid != nil {
-		d.hid.Close()
+		closeErr = d.hid.Close()
 	}
-	hid.Exit()
+	return errors.Join(closeErr, hid.Exit())
 }
 
 // Send sends a protocol command and returns the response.
@@ -104,18 +106,19 @@ func (d *Device) Send(pkt Packet) (Packet, error) {
 
 // ListRazerDevices returns every Razer HID interface visible on the system.
 // Useful for finding the correct product ID.
-func ListRazerDevices() ([]hid.DeviceInfo, error) {
-	if err := hid.Init(); err != nil {
+func ListRazerDevices() (devices []hid.DeviceInfo, err error) {
+	if err = hid.Init(); err != nil {
 		return nil, fmt.Errorf("hid init: %w", err)
 	}
-	defer hid.Exit()
+	defer func() {
+		err = errors.Join(err, hid.Exit())
+	}()
 
-	var devices []hid.DeviceInfo
-	if err := hid.Enumerate(VendorID, 0x0000, func(info *hid.DeviceInfo) error {
+	if enumErr := hid.Enumerate(VendorID, 0x0000, func(info *hid.DeviceInfo) error {
 		devices = append(devices, *info)
 		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("enumerate: %w", err)
+	}); enumErr != nil {
+		return nil, fmt.Errorf("enumerate: %w", enumErr)
 	}
 	return devices, nil
 }
