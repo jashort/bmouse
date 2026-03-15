@@ -25,8 +25,8 @@ func run() error {
 	cmd := os.Args[1]
 
 	if cmd == "list" {
-		internal.ListRazerDevices()
-		return nil
+		err := internal.ListRazerDevices()
+		return err
 	}
 
 	dev, err := internal.Open()

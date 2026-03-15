@@ -1,12 +1,13 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/sstallion/go-hid"
 )
 
-// Razer vendor ID (all Razer peripherals).
+// VendorID Razer vendor ID (all Razer peripherals).
 const VendorID = 0x1532
 
 // Known product IDs for Basilisk V3 variants.
@@ -104,16 +105,19 @@ func (d *Device) Send(pkt Packet) (Packet, error) {
 
 // ListRazerDevices prints every Razer HID interface visible on the system.
 // Useful for finding the correct product ID.
-func ListRazerDevices() {
-	if err := hid.Init(); err != nil {
+func ListRazerDevices() error {
+	var err error
+	if err = hid.Init(); err != nil {
 		fmt.Println("hid init error:", err)
-		return
+		return err
 	}
-	defer hid.Exit()
+	defer func() {
+		err = errors.Join(hid.Exit())
+	}()
 
 	fmt.Println("Razer HID devices:")
 	found := false
-	hid.Enumerate(VendorID, 0x0000, func(info *hid.DeviceInfo) error {
+	err = hid.Enumerate(VendorID, 0x0000, func(info *hid.DeviceInfo) error {
 		found = true
 		name := info.ProductStr
 		if name == "" {
@@ -123,7 +127,11 @@ func ListRazerDevices() {
 			info.ProductID, name, info.UsagePage, info.Usage, info.InterfaceNbr, info.Path)
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 	if !found {
 		fmt.Println("  (none found – is a Razer device plugged in?)")
 	}
+	return nil
 }
