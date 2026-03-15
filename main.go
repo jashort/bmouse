@@ -80,6 +80,31 @@ func main() {
 			fmt.Printf("Brightness set to %d\n", val)
 		}
 
+	case "scroll":
+		if len(rest) == 0 {
+			mode, err := dev.GetScrollMode()
+			exitOn(err)
+			names := map[byte]string{
+				internal.ScrollTactile:   "tactile",
+				internal.ScrollFreeSpin:  "free-spin",
+				internal.ScrollSmartReel: "smart-reel (auto)",
+			}
+			name := names[mode]
+			if name == "" {
+				name = fmt.Sprintf("unknown (0x%02X)", mode)
+			}
+			fmt.Printf("Scroll mode: %s\n", name)
+		} else {
+			modeName := strings.ToLower(rest[0])
+			mode, ok := internal.ScrollModeByName[modeName]
+			if !ok {
+				fmt.Fprintf(os.Stderr, "Unknown scroll mode %q (valid: tactile, free, smart)\n", modeName)
+				os.Exit(1)
+			}
+			exitOn(dev.SetScrollMode(mode))
+			fmt.Printf("Scroll mode set to %s\n", modeName)
+		}
+
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", cmd)
 		printUsage()
@@ -104,6 +129,8 @@ Commands:
   reactive <hex-color>      Lights up on click
   off                       Turn LEDs off
   brightness [0-255]        Get or set brightness
+  scroll [mode]             Get or set scroll wheel mode
+                            Modes: tactile, free, smart
 
 Zones (optional --zone flag, default all):
   all      All LEDs at once
@@ -119,7 +146,10 @@ Examples:
   bmouse breathe --zone logo 00ff88
   bmouse spectrum
   bmouse off --zone scroll
-  bmouse brightness 200`)
+  bmouse brightness 200
+  bmouse scroll tactile
+  bmouse scroll free
+  bmouse scroll smart`)
 }
 
 func parseZone(args []string) ([]byte, []string) {

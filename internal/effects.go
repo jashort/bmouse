@@ -1,5 +1,7 @@
 package internal
 
+import "fmt"
+
 // ─── LED Zones ───────────────────────────────────────────────────────────────
 
 // LED zone IDs for the Basilisk V3 Pro.
@@ -57,7 +59,7 @@ func (d *Device) ensureBrightness(zone byte) error {
 
 // ─── High-level effect methods ───────────────────────────────────────────────
 
-// SetStatic sets a zone to a fixed RGB colour.
+// SetStatic sets a zone to a fixed RGB color.
 func (d *Device) SetStatic(zone, r, g, b byte) error {
 	if err := d.ensureBrightness(zone); err != nil {
 		return err
@@ -66,7 +68,7 @@ func (d *Device) SetStatic(zone, r, g, b byte) error {
 	pkt.Args[0] = StorageVarStore
 	pkt.Args[1] = zone
 	pkt.Args[2] = EffectStatic
-	pkt.Args[5] = 0x01 // colour count
+	pkt.Args[5] = 0x01 // color count
 	pkt.Args[6] = r
 	pkt.Args[7] = g
 	pkt.Args[8] = b
@@ -74,12 +76,12 @@ func (d *Device) SetStatic(zone, r, g, b byte) error {
 	return err
 }
 
-// SetStaticAll sets every LED zone to the same RGB colour.
+// SetStaticAll sets every LED zone to the same RGB color.
 func (d *Device) SetStaticAll(r, g, b byte) error {
 	return d.SetStatic(ZoneAll, r, g, b)
 }
 
-// SetBreathing sets a single-colour breathing (pulsing) effect.
+// SetBreathing sets a single-color breathing (pulsing) effect.
 func (d *Device) SetBreathing(zone, r, g, b byte) error {
 	if err := d.ensureBrightness(zone); err != nil {
 		return err
@@ -96,7 +98,7 @@ func (d *Device) SetBreathing(zone, r, g, b byte) error {
 	return err
 }
 
-// SetBreathingDual sets a two-colour breathing effect.
+// SetBreathingDual sets a two-color breathing effect.
 func (d *Device) SetBreathingDual(zone, r1, g1, b1, r2, g2, b2 byte) error {
 	if err := d.ensureBrightness(zone); err != nil {
 		return err
@@ -116,7 +118,7 @@ func (d *Device) SetBreathingDual(zone, r1, g1, b1, r2, g2, b2 byte) error {
 	return err
 }
 
-// SetBreathingRandom sets a random-colour breathing effect.
+// SetBreathingRandom sets a random-color breathing effect.
 func (d *Device) SetBreathingRandom(zone byte) error {
 	if err := d.ensureBrightness(zone); err != nil {
 		return err
@@ -216,4 +218,106 @@ func (d *Device) GetBrightness(zone byte) (byte, error) {
 		return 0, err
 	}
 	return resp.Args[2], nil
+}
+
+// ─── Scroll Mode ─────────────────────────────────────────────────────────────
+
+// Scroll wheel mode constants for SetScrollMode.
+const (
+	ScrollTactile   byte = 0x00 // clicky, notched steps (never free-spins)
+	ScrollFreeSpin  byte = 0x01 // smooth, frictionless spinning
+	ScrollSmartReel byte = 0x02 // auto-switch: tactile at low speed, free-spin at high speed
+)
+
+// Command IDs for scroll mode control (all class 0x02).
+const (
+	ClassDevice      byte = 0x02
+	CmdScrollMode    byte = 0x14 // base mode: 0x00=clutch engaged, 0x01=free-spin
+	CmdScrollModeSR  byte = 0x16 // smart-reel toggle: 0x00=off, 0x02=on
+	CmdScrollModeSR2 byte = 0x17 // smart-reel param: 0x00=off, 0x01=on
+	CmdGetScrollMode byte = 0x94
+	CmdGetScrollSR   byte = 0x96
+	CmdGetScrollSR2  byte = 0x97
+)
+
+// ScrollModeByName maps human-readable names to mode values.
+var ScrollModeByName = map[string]byte{
+	"tactile":  ScrollTactile,
+	"free":     ScrollFreeSpin,
+	"freespin": ScrollFreeSpin,
+	"smart":    ScrollSmartReel,
+	"auto":     ScrollSmartReel,
+}
+
+// SetScrollMode sets the scroll wheel mode.
+//   - ScrollTactile:   pure tactile, never free-spins
+//   - ScrollFreeSpin:  always free-spinning
+//   - ScrollSmartReel: auto-switch based on scroll speed
+func (d *Device) SetScrollMode(mode byte) error {
+	switch mode {
+	case ScrollTactile:
+		// Clutch engaged + smart-reel disabled
+		if err := d.setScrollReg(CmdScrollMode, 0x00); err != nil {
+			return err
+		}
+		if err := d.setScrollReg(CmdScrollModeSR, 0x00); err != nil {
+			return err
+		}
+		return d.setScrollReg(CmdScrollModeSR2, 0x00)
+
+	case ScrollFreeSpin:
+		// Clutch disengaged
+		return d.setScrollReg(CmdScrollMode, 0x01)
+
+	case ScrollSmartReel:
+		// Clutch engaged + smart-reel enabled
+		if err := d.setScrollReg(CmdScrollMode, 0x00); err != nil {
+			return err
+		}
+		if err := d.setScrollReg(CmdScrollModeSR, 0x02); err != nil {
+			return err
+		}
+		return d.setScrollReg(CmdScrollModeSR2, 0x01)
+
+	default:
+		return fmt.Errorf("unknown scroll mode 0x%02X", mode)
+	}
+}
+
+// GetScrollMode reads the current scroll wheel mode.
+func (d *Device) GetScrollMode() (byte, error) {
+	base, err := d.getScrollReg(CmdGetScrollMode)
+	if err != nil {
+		return 0, err
+	}
+	if base == 0x01 {
+		return ScrollFreeSpin, nil
+	}
+	// base == 0x00: check if smart-reel is on
+	sr, err := d.getScrollReg(CmdGetScrollSR)
+	if err != nil {
+		return 0, err
+	}
+	if sr >= 0x01 {
+		return ScrollSmartReel, nil
+	}
+	return ScrollTactile, nil
+}
+
+func (d *Device) setScrollReg(cmd, val byte) error {
+	pkt := NewPacket(ClassDevice, cmd, 0x02)
+	pkt.Args[0] = StorageVarStore
+	pkt.Args[1] = val
+	_, err := d.Send(pkt)
+	return err
+}
+
+func (d *Device) getScrollReg(cmd byte) (byte, error) {
+	pkt := NewPacket(ClassDevice, cmd, 0x02)
+	pkt.Args[0] = StorageVarStore
+	resp, err := d.Send(pkt)
+	if err != nil {
+		return 0, err
+	}
+	return resp.Args[1], nil
 }
