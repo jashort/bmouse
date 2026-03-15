@@ -24,6 +24,14 @@ var ZoneByName = map[string]byte{
 	"strip":  ZoneUnderglow,
 }
 
+// ZoneNameByID maps zone IDs back to their human-readable names.
+var ZoneNameByID = map[byte]string{
+	ZoneAll:         "all",
+	ZoneScrollWheel: "scroll",
+	ZoneLogo:        "logo",
+	ZoneUnderglow:   "underglow",
+}
+
 // ─── Effect IDs ──────────────────────────────────────────────────────────────
 
 const (

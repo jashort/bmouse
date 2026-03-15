@@ -73,7 +73,7 @@ func run() (err error) {
 		if err := applyZones(zones, func(z byte) error { return dev.SetStatic(z, r, g, b) }); err != nil {
 			return err
 		}
-		fmt.Printf("Static #%02X%02X%02X\n", r, g, b)
+		fmt.Printf("Static #%02X%02X%02X (zone: %s)\n", r, g, b, *zoneName)
 
 	case "breathe", "breathing":
 		r, g, b, err := parseColor(args, cmd)
@@ -83,7 +83,7 @@ func run() (err error) {
 		if err := applyZones(zones, func(z byte) error { return dev.SetBreathing(z, r, g, b) }); err != nil {
 			return err
 		}
-		fmt.Printf("Breathing #%02X%02X%02X\n", r, g, b)
+		fmt.Printf("Breathing #%02X%02X%02X (zone: %s)\n", r, g, b, *zoneName)
 
 	case "breathe-dual", "breathing-dual":
 		if len(args) < 2 {
@@ -102,13 +102,13 @@ func run() (err error) {
 		}); err != nil {
 			return err
 		}
-		fmt.Printf("Breathing dual #%02X%02X%02X / #%02X%02X%02X\n", r1, g1, b1, r2, g2, b2)
+		fmt.Printf("Breathing dual #%02X%02X%02X / #%02X%02X%02X (zone: %s)\n", r1, g1, b1, r2, g2, b2, *zoneName)
 
 	case "spectrum", "rainbow":
 		if err := applyZones(zones, func(z byte) error { return dev.SetSpectrum(z) }); err != nil {
 			return err
 		}
-		fmt.Println("Spectrum cycling")
+		fmt.Printf("Spectrum cycling (zone: %s)\n", *zoneName)
 
 	case "wave":
 		dir := byte(1)
@@ -118,7 +118,7 @@ func run() (err error) {
 		if err := applyZones(zones, func(z byte) error { return dev.SetWave(z, dir) }); err != nil {
 			return err
 		}
-		fmt.Println("Wave effect")
+		fmt.Printf("Wave effect (zone: %s)\n", *zoneName)
 
 	case "reactive":
 		if *speed < 1 || *speed > 3 {
@@ -133,13 +133,13 @@ func run() (err error) {
 		}); err != nil {
 			return err
 		}
-		fmt.Printf("Reactive #%02X%02X%02X speed=%d\n", r, g, b, *speed)
+		fmt.Printf("Reactive #%02X%02X%02X speed=%d (zone: %s)\n", r, g, b, *speed, *zoneName)
 
 	case "off":
 		if err := applyZones(zones, func(z byte) error { return dev.SetOff(z) }); err != nil {
 			return err
 		}
-		fmt.Println("LEDs off")
+		fmt.Printf("LEDs off (zone: %s)\n", *zoneName)
 
 	case "brightness":
 		if len(args) == 0 {
@@ -158,7 +158,7 @@ func run() (err error) {
 			if err := applyZones(zones, func(z byte) error { return dev.SetBrightness(z, byte(val)) }); err != nil {
 				return err
 			}
-			fmt.Printf("Brightness set to %d\n", val)
+			fmt.Printf("Brightness set to %d (zone: %s)\n", val, *zoneName)
 		}
 
 	case "scroll":
