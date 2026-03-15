@@ -110,16 +110,6 @@ func run() (err error) {
 		}
 		fmt.Printf("Spectrum cycling (zone: %s)\n", *zoneName)
 
-	case "wave":
-		dir := byte(1)
-		if len(args) > 0 && (args[0] == "right" || args[0] == "2") {
-			dir = 2
-		}
-		if err := applyZones(zones, func(z byte) error { return dev.SetWave(z, dir) }); err != nil {
-			return err
-		}
-		fmt.Printf("Wave effect (zone: %s)\n", *zoneName)
-
 	case "reactive":
 		if *speed < 1 || *speed > 3 {
 			return fmt.Errorf("--speed must be 1 (short), 2 (medium), or 3 (long)")
@@ -272,7 +262,6 @@ Commands:
   breathe      <hex-color>       Single-color breathing      e.g. breathe 00ff00
   breathe-dual <color1> <color2> Two-color breathing         e.g. breathe-dual ff0000 0000ff
   spectrum                       Rainbow spectrum cycling
-  wave         [left|right]      Wave effect (default: left)
   reactive     <hex-color>       Lights up on click
                [--speed 1-3]       1=short  2=medium(default)  3=long
   off                            Turn LEDs off

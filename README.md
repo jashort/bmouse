@@ -47,11 +47,10 @@ bmouse <command> [--zone <zone>] [args...]
 | Command                              | Description                  | Example                             |
 |--------------------------------------|------------------------------|-------------------------------------|
 | `list`                               | List all Razer HID devices   | `bmouse list`                       |
-| `static <hex-color>`                 | Set a solid color           | `bmouse static ff0000`              |
-| `breathe <hex-color>`                | Single-color breathing      | `bmouse breathe 00ff00`             |
-| `breathe-dual <color1> <color2>`     | Two-color breathing         | `bmouse breathe-dual ff0000 0000ff` |
+| `static <hex-color>`                 | Set a solid color            | `bmouse static ff0000`              |
+| `breathe <hex-color>`                | Single-color breathing       | `bmouse breathe 00ff00`             |
+| `breathe-dual <color1> <color2>`     | Two-color breathing          | `bmouse breathe-dual ff0000 0000ff` |
 | `spectrum`                           | Rainbow spectrum cycling     | `bmouse spectrum`                   |
-| `wave [left\|right]`                 | Wave effect (default: left)  | `bmouse wave right`                 |
 | `reactive <hex-color> [--speed 1-3]` | Light up on click            | `bmouse reactive ff0000 --speed 1`  |
 | `off`                                | Turn LEDs off                | `bmouse off`                        |
 | `brightness [0-255]`                 | Get or set brightness        | `bmouse brightness 200`             |

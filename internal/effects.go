@@ -39,7 +39,6 @@ const (
 	EffectStatic    byte = 0x01
 	EffectBreathing byte = 0x02
 	EffectSpectrum  byte = 0x03
-	EffectWave      byte = 0x04
 	EffectReactive  byte = 0x05
 )
 
@@ -156,20 +155,6 @@ func (d *Device) SetSpectrum(zone byte) error {
 // SetSpectrumAll sets spectrum cycling on every zone.
 func (d *Device) SetSpectrumAll() error {
 	return d.SetSpectrum(ZoneAll)
-}
-
-// SetWave sets the wave effect. direction: 1 = left→right, 2 = right→left.
-func (d *Device) SetWave(zone, direction byte) error {
-	if err := d.ensureBrightness(zone); err != nil {
-		return err
-	}
-	pkt := NewPacket(ClassLED, CmdSetEffect, 0x06)
-	pkt.Args[0] = StorageVarStore
-	pkt.Args[1] = zone
-	pkt.Args[2] = EffectWave
-	pkt.Args[3] = direction
-	_, err := d.Send(pkt)
-	return err
 }
 
 // SetReactive sets the reactive effect (lights up on click).
