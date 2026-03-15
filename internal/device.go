@@ -99,7 +99,7 @@ func (d *Device) Close() {
 
 // Send sends a protocol command and returns the response.
 func (d *Device) Send(pkt Packet) (Packet, error) {
-	return SendCommand(d.hid, pkt)
+	return sendCommand(d.hid, pkt)
 }
 
 // ListRazerDevices prints every Razer HID interface visible on the system.

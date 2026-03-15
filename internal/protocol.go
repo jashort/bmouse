@@ -65,7 +65,7 @@ func NewPacket(class, id, dataSize byte) Packet {
 	}
 }
 
-// Bytes serialises the packet to a 90-byte slice (with CRC filled in).
+// Bytes serializes the packet to a 90-byte slice (with CRC filled in).
 func (p *Packet) Bytes() [PacketLen]byte {
 	var buf [PacketLen]byte
 	buf[0] = p.Status
@@ -81,7 +81,7 @@ func (p *Packet) Bytes() [PacketLen]byte {
 	return buf
 }
 
-// ParsePacket deserialises a 90-byte response into a Packet.
+// ParsePacket deserializes a 90-byte response into a Packet.
 func ParsePacket(buf [PacketLen]byte) Packet {
 	var p Packet
 	p.Status = buf[0]
@@ -104,9 +104,9 @@ func crc(buf *[PacketLen]byte) byte {
 	return c
 }
 
-// SendCommand writes a feature report to the device and reads the response.
+// sendCommand writes a feature report to the device and reads the response.
 // The report ID used by Razer is 0x00.
-func SendCommand(dev *hid.Device, pkt Packet) (Packet, error) {
+func sendCommand(dev *hid.Device, pkt Packet) (Packet, error) {
 	raw := pkt.Bytes()
 
 	// Feature reports on macOS/hidapi require the report-ID as the first byte.
