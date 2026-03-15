@@ -83,7 +83,7 @@ func run() (err error) {
 
 	case "breathe-dual", "breathing-dual":
 		if len(rest) < 2 {
-			return fmt.Errorf("breathe-dual requires two hex colours (e.g. breathe-dual ff0000 0000ff)")
+			return fmt.Errorf("breathe-dual requires two hex colors (e.g. breathe-dual ff0000 0000ff)")
 		}
 		r1, g1, b1, err := parseColor(rest, cmd)
 		if err != nil {
@@ -215,9 +215,9 @@ Usage:
 
 Commands:
   list                           List all Razer HID devices
-  static       <hex-color>       Set a solid colour           e.g. static ff0000
-  breathe      <hex-color>       Single-colour breathing      e.g. breathe 00ff00
-  breathe-dual <color1> <color2> Two-colour breathing         e.g. breathe-dual ff0000 0000ff
+  static       <hex-color>       Set a solid color           e.g. static ff0000
+  breathe      <hex-color>       Single-color breathing      e.g. breathe 00ff00
+  breathe-dual <color1> <color2> Two-color breathing         e.g. breathe-dual ff0000 0000ff
   spectrum                       Rainbow spectrum cycling
   wave         [left|right]      Wave effect (default: left)
   reactive     <hex-color>       Lights up on click
@@ -233,7 +233,7 @@ Zones (optional --zone flag, default all):
   logo     Logo LED
   under    Underglow light strip
 
-Colour format:
+color format:
   6-digit hex, with or without leading '#':  ff8800  or  #ff8800
 
 Examples:
@@ -282,11 +282,11 @@ func parseFlag(args []string, name string) (string, []string, error) {
 
 func parseColor(args []string, cmdName string) (r, g, b byte, err error) {
 	if len(args) == 0 {
-		return 0, 0, 0, fmt.Errorf("%s requires a hex colour argument (e.g. ff0000)", cmdName)
+		return 0, 0, 0, fmt.Errorf("%s requires a hex color argument (e.g. ff0000)", cmdName)
 	}
 	hex := strings.TrimPrefix(args[0], "#")
 	if len(hex) != 6 {
-		return 0, 0, 0, fmt.Errorf("invalid colour %q — expected 6-digit hex (e.g. ff0000)", args[0])
+		return 0, 0, 0, fmt.Errorf("invalid color %q — expected 6-digit hex (e.g. ff0000)", args[0])
 	}
 	rv, _ := strconv.ParseUint(hex[0:2], 16, 8)
 	gv, _ := strconv.ParseUint(hex[2:4], 16, 8)
