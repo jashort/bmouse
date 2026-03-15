@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -26,25 +27,29 @@ func run() (err error) {
 	cmd := os.Args[1]
 
 	if cmd == "list" {
-		devices, err := internal.ListRazerDevices()
-		if err != nil {
-			return err
-		}
-		if len(devices) == 0 {
-			fmt.Println("(none found – is a Razer device plugged in?)")
+		return runList()
+	}
+
+	// Build a FlagSet shared by all subcommands.
+	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
+	fs.Usage = printUsage
+
+	zoneName := fs.String("zone", "all", "LED zone: all, scroll, logo, under")
+	speed := fs.Int("speed", 2, "Reactive speed: 1=short 2=medium 3=long")
+
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		fmt.Println("Razer HID devices:")
-		for _, info := range devices {
-			name := info.ProductStr
-			if name == "" {
-				name = "(unnamed)"
-			}
-			fmt.Printf("  PID=0x%04X  %-30s  UsagePage=0x%04X  Usage=0x%04X  Interface=%d  Path=%s\n",
-				info.ProductID, name, info.UsagePage, info.Usage, info.InterfaceNbr, info.Path)
-		}
-		return nil
+		return err
 	}
+
+	zones, err := resolveZones(*zoneName)
+	if err != nil {
+		return err
+	}
+
+	args := fs.Args() // positional arguments after flags
 
 	dev, err := internal.Open()
 	if err != nil {
@@ -54,15 +59,9 @@ func run() (err error) {
 		err = errors.Join(err, dev.Close())
 	}()
 
-	// Parse optional --zone flag (default "all").
-	zones, rest, err := parseZone(os.Args[2:])
-	if err != nil {
-		return err
-	}
-
 	switch cmd {
 	case "static":
-		r, g, b, err := parseColor(rest, cmd)
+		r, g, b, err := parseColor(args, cmd)
 		if err != nil {
 			return err
 		}
@@ -72,7 +71,7 @@ func run() (err error) {
 		fmt.Printf("Static #%02X%02X%02X\n", r, g, b)
 
 	case "breathe", "breathing":
-		r, g, b, err := parseColor(rest, cmd)
+		r, g, b, err := parseColor(args, cmd)
 		if err != nil {
 			return err
 		}
@@ -82,14 +81,14 @@ func run() (err error) {
 		fmt.Printf("Breathing #%02X%02X%02X\n", r, g, b)
 
 	case "breathe-dual", "breathing-dual":
-		if len(rest) < 2 {
+		if len(args) < 2 {
 			return fmt.Errorf("breathe-dual requires two hex colors (e.g. breathe-dual ff0000 0000ff)")
 		}
-		r1, g1, b1, err := parseColor(rest, cmd)
+		r1, g1, b1, err := parseColor(args, cmd)
 		if err != nil {
 			return err
 		}
-		r2, g2, b2, err := parseColor(rest[1:], cmd)
+		r2, g2, b2, err := parseColor(args[1:], cmd)
 		if err != nil {
 			return err
 		}
@@ -108,10 +107,8 @@ func run() (err error) {
 
 	case "wave":
 		dir := byte(1)
-		if len(rest) > 0 {
-			if rest[0] == "right" || rest[0] == "2" {
-				dir = 2
-			}
+		if len(args) > 0 && (args[0] == "right" || args[0] == "2") {
+			dir = 2
 		}
 		if err := applyZones(zones, func(z byte) error { return dev.SetWave(z, dir) }); err != nil {
 			return err
@@ -119,29 +116,19 @@ func run() (err error) {
 		fmt.Println("Wave effect")
 
 	case "reactive":
-		speedStr, rest, err := parseFlag(rest, "speed")
+		if *speed < 1 || *speed > 3 {
+			return fmt.Errorf("--speed must be 1 (short), 2 (medium), or 3 (long)")
+		}
+		r, g, b, err := parseColor(args, cmd)
 		if err != nil {
 			return err
 		}
-		speed := byte(2) // medium default
-		if speedStr != "" {
-			v, err := parseInt(speedStr, "speed (1=short, 2=medium, 3=long)")
-			if err != nil {
-				return err
-			}
-			if v < 1 || v > 3 {
-				return fmt.Errorf("--speed must be 1 (short), 2 (medium), or 3 (long)")
-			}
-			speed = byte(v)
-		}
-		r, g, b, err := parseColor(rest, cmd)
-		if err != nil {
+		if err := applyZones(zones, func(z byte) error {
+			return dev.SetReactive(z, byte(*speed), r, g, b)
+		}); err != nil {
 			return err
 		}
-		if err := applyZones(zones, func(z byte) error { return dev.SetReactive(z, speed, r, g, b) }); err != nil {
-			return err
-		}
-		fmt.Printf("Reactive #%02X%02X%02X speed=%d\n", r, g, b, speed)
+		fmt.Printf("Reactive #%02X%02X%02X speed=%d\n", r, g, b, *speed)
 
 	case "off":
 		if err := applyZones(zones, func(z byte) error { return dev.SetOff(z) }); err != nil {
@@ -150,7 +137,7 @@ func run() (err error) {
 		fmt.Println("LEDs off")
 
 	case "brightness":
-		if len(rest) == 0 {
+		if len(args) == 0 {
 			for _, z := range internal.ZoneEach {
 				b, err := dev.GetBrightness(z)
 				if err != nil {
@@ -159,7 +146,7 @@ func run() (err error) {
 				fmt.Printf("Zone 0x%02X brightness: %d/255\n", z, b)
 			}
 		} else {
-			val, err := parseInt(rest[0], "brightness value 0-255")
+			val, err := parseInt(args[0], "brightness value 0-255")
 			if err != nil {
 				return err
 			}
@@ -170,7 +157,7 @@ func run() (err error) {
 		}
 
 	case "scroll":
-		if len(rest) == 0 {
+		if len(args) == 0 {
 			mode, err := dev.GetScrollMode()
 			if err != nil {
 				return err
@@ -186,7 +173,7 @@ func run() (err error) {
 			}
 			fmt.Printf("Scroll mode: %s\n", name)
 		} else {
-			modeName := strings.ToLower(rest[0])
+			modeName := strings.ToLower(args[0])
 			mode, ok := internal.ScrollModeByName[modeName]
 			if !ok {
 				return fmt.Errorf("unknown scroll mode %q (valid: tactile, free, smart)", modeName)
@@ -205,7 +192,30 @@ func run() (err error) {
 	return nil
 }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── subcommand handlers ──────────────────────────────────────────────────────
+
+func runList() error {
+	devices, err := internal.ListRazerDevices()
+	if err != nil {
+		return err
+	}
+	if len(devices) == 0 {
+		fmt.Println("(none found – is a Razer device plugged in?)")
+		return nil
+	}
+	fmt.Println("Razer HID devices:")
+	for _, info := range devices {
+		name := info.ProductStr
+		if name == "" {
+			name = "(unnamed)"
+		}
+		fmt.Printf("  PID=0x%04X  %-30s  UsagePage=0x%04X  Usage=0x%04X  Interface=%d  Path=%s\n",
+			info.ProductID, name, info.UsagePage, info.Usage, info.InterfaceNbr, info.Path)
+	}
+	return nil
+}
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
 func printUsage() {
 	fmt.Println(`bmouse — Razer Basilisk V3 Pro LED control (direct USB HID)
@@ -249,35 +259,13 @@ Examples:
   bmouse scroll smart`)
 }
 
-func parseZone(args []string) ([]byte, []string, error) {
-	for i, a := range args {
-		if a == "--zone" && i+1 < len(args) {
-			name := strings.ToLower(args[i+1])
-			z, ok := internal.ZoneByName[name]
-			if !ok {
-				return nil, nil, fmt.Errorf("unknown zone %q (valid: all, scroll, logo, under)", name)
-			}
-			rest := append(args[:i], args[i+2:]...)
-			return []byte{z}, rest, nil
-		}
+// resolveZones converts a zone name to a slice of zone bytes.
+func resolveZones(name string) ([]byte, error) {
+	z, ok := internal.ZoneByName[strings.ToLower(name)]
+	if !ok {
+		return nil, fmt.Errorf("unknown zone %q (valid: all, scroll, logo, under)", name)
 	}
-	return nil, args, nil // nil zones means "all"
-}
-
-// parseFlag removes --name value from args and returns the value and remaining
-// args. Returns ("", args, nil) if the flag is not present.
-func parseFlag(args []string, name string) (string, []string, error) {
-	flag := "--" + name
-	for i, a := range args {
-		if a == flag {
-			if i+1 >= len(args) {
-				return "", nil, fmt.Errorf("%s requires a value", flag)
-			}
-			rest := append(args[:i], args[i+2:]...)
-			return args[i+1], rest, nil
-		}
-	}
-	return "", args, nil
+	return []byte{z}, nil
 }
 
 func parseColor(args []string, cmdName string) (r, g, b byte, err error) {
