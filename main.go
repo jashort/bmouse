@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -28,6 +29,10 @@ func run() (err error) {
 
 	if cmd == "list" {
 		return runList()
+	}
+
+	if cmd == "version" {
+		return runVersion()
 	}
 
 	// Build a FlagSet shared by all subcommands.
@@ -194,6 +199,44 @@ func run() (err error) {
 
 // ─── subcommand handlers ──────────────────────────────────────────────────────
 
+func runVersion() error {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		fmt.Println("version information not available (binary was not built with module support)")
+		return nil
+	}
+
+	commit := "(unknown)"
+	date := "(unknown)"
+	modified := false
+
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			commit = s.Value
+		case "vcs.time":
+			date = s.Value
+		case "vcs.modified":
+			modified = s.Value == "true"
+		}
+	}
+
+	if modified {
+		commit += " (modified)"
+	}
+
+	version := info.Main.Version
+	if version == "" || version == "(devel)" {
+		version = "dev"
+	}
+
+	fmt.Printf("bmouse %s\n", version)
+	fmt.Printf("  commit: %s\n", commit)
+	fmt.Printf("  built:  %s\n", date)
+	fmt.Printf("  go:     %s\n", info.GoVersion)
+	return nil
+}
+
 func runList() error {
 	devices, err := internal.ListRazerDevices()
 	if err != nil {
@@ -236,6 +279,7 @@ Commands:
   brightness   [0-255]           Get or set brightness
   scroll       [mode]            Get or set scroll wheel mode
                                    Modes: tactile, free, smart
+  version                        Print version and build info
 
 Zones (optional --zone flag, default all):
   all      All LEDs at once
