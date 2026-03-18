@@ -46,17 +46,18 @@ bmouse <command> [--zone <zone>] [args...]
 
 ### Commands
 
-| Command                              | Description                  | Example                             |
-|--------------------------------------|------------------------------|-------------------------------------|
-| `list`                               | List all Razer HID devices   | `bmouse list`                       |
-| `static <hex-color>`                 | Set a solid color            | `bmouse static ff0000`              |
-| `breathe <hex-color>`                | Single-color breathing       | `bmouse breathe 00ff00`             |
-| `breathe-dual <color1> <color2>`     | Two-color breathing          | `bmouse breathe-dual ff0000 0000ff` |
-| `spectrum`                           | Rainbow spectrum cycling     | `bmouse spectrum`                   |
-| `reactive <hex-color> [--speed 1-3]` | Light up on click            | `bmouse reactive ff0000 --speed 1`  |
-| `off`                                | Turn LEDs off                | `bmouse off`                        |
-| `brightness [0-255]`                 | Get or set brightness        | `bmouse brightness 200`             |
-| `scroll [mode]`                      | Get or set scroll wheel mode | `bmouse scroll tactile`             |
+| Command                              | Description                                | Example                             |
+|--------------------------------------|--------------------------------------------|-------------------------------------|
+| `list`                               | List all Razer HID devices                 | `bmouse list`                       |
+| `status`                               | Show current active-profile settings  | `bmouse status`                     |
+| `static <hex-color>`                 | Set a solid color                          | `bmouse static ff0000`              |
+| `breathe <hex-color>`                | Single-color breathing                     | `bmouse breathe 00ff00`             |
+| `breathe-dual <color1> <color2>`     | Two-color breathing                        | `bmouse breathe-dual ff0000 0000ff` |
+| `spectrum`                           | Rainbow spectrum cycling                   | `bmouse spectrum`                   |
+| `reactive <hex-color> [--speed 1-3]` | Light up on click                          | `bmouse reactive ff0000 --speed 1`  |
+| `off`                                | Turn LEDs off                              | `bmouse off`                        |
+| `brightness [0-255]`                 | Get or set brightness                      | `bmouse brightness 200`             |
+| `scroll [mode]`                      | Get or set scroll wheel mode               | `bmouse scroll tactile`             |
 
 #### Reactive speed values
 
@@ -73,6 +74,13 @@ bmouse <command> [--zone <zone>] [args...]
 | `tactile` | Clicky, notched scrolling                                 |
 | `free`    | Free-spin (smooth, silent)                                |
 | `smart`   | Smart Reel — automatically switches based on scroll speed |
+
+### Flags
+
+| Flag              | Description                                                        | Default        |
+|-------------------|--------------------------------------------------------------------|----------------|
+| `--zone <zone>`   | Target LED zone (see table below)                                  | `all`          |
+| `--speed <1-3>`   | Reactive effect duration (1=short, 2=medium, 3=long)              | `2` (medium)   |
 
 ### Zones
 
@@ -123,8 +131,12 @@ bmouse brightness
 # Switch to free-spin scroll wheel
 bmouse scroll free
 
+
 # Check current scroll mode
 bmouse scroll
+
+# Show current LED and scroll settings
+bmouse status
 ```
 
 ## Dependencies

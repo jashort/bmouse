@@ -65,12 +65,15 @@ func run() (err error) {
 	}()
 
 	switch cmd {
+	case "status":
+		return runStatus(dev)
+
 	case "static":
 		r, g, b, err := parseColor(args, cmd)
 		if err != nil {
 			return err
 		}
-		if err := applyZones(zones, func(z byte) error { return dev.SetStatic(z, r, g, b) }); err != nil {
+		if err := applyZones(zones, func(z byte) error { return dev.SetStatic(internal.StorageSaved, z, r, g, b) }); err != nil {
 			return err
 		}
 		fmt.Printf("Static #%02X%02X%02X (zone: %s)\n", r, g, b, *zoneName)
@@ -80,7 +83,7 @@ func run() (err error) {
 		if err != nil {
 			return err
 		}
-		if err := applyZones(zones, func(z byte) error { return dev.SetBreathing(z, r, g, b) }); err != nil {
+		if err := applyZones(zones, func(z byte) error { return dev.SetBreathing(internal.StorageSaved, z, r, g, b) }); err != nil {
 			return err
 		}
 		fmt.Printf("Breathing #%02X%02X%02X (zone: %s)\n", r, g, b, *zoneName)
@@ -98,14 +101,14 @@ func run() (err error) {
 			return err
 		}
 		if err := applyZones(zones, func(z byte) error {
-			return dev.SetBreathingDual(z, r1, g1, b1, r2, g2, b2)
+			return dev.SetBreathingDual(internal.StorageSaved, z, r1, g1, b1, r2, g2, b2)
 		}); err != nil {
 			return err
 		}
 		fmt.Printf("Breathing dual #%02X%02X%02X / #%02X%02X%02X (zone: %s)\n", r1, g1, b1, r2, g2, b2, *zoneName)
 
 	case "spectrum", "rainbow":
-		if err := applyZones(zones, func(z byte) error { return dev.SetSpectrum(z) }); err != nil {
+		if err := applyZones(zones, func(z byte) error { return dev.SetSpectrum(internal.StorageSaved, z) }); err != nil {
 			return err
 		}
 		fmt.Printf("Spectrum cycling (zone: %s)\n", *zoneName)
@@ -119,14 +122,14 @@ func run() (err error) {
 			return err
 		}
 		if err := applyZones(zones, func(z byte) error {
-			return dev.SetReactive(z, byte(*speed), r, g, b)
+			return dev.SetReactive(internal.StorageSaved, z, byte(*speed), r, g, b)
 		}); err != nil {
 			return err
 		}
 		fmt.Printf("Reactive #%02X%02X%02X speed=%d (zone: %s)\n", r, g, b, *speed, *zoneName)
 
 	case "off":
-		if err := applyZones(zones, func(z byte) error { return dev.SetOff(z) }); err != nil {
+		if err := applyZones(zones, func(z byte) error { return dev.SetOff(internal.StorageSaved, z) }); err != nil {
 			return err
 		}
 		fmt.Printf("LEDs off (zone: %s)\n", *zoneName)
@@ -145,7 +148,7 @@ func run() (err error) {
 			if err != nil {
 				return err
 			}
-			if err := applyZones(zones, func(z byte) error { return dev.SetBrightness(z, byte(val)) }); err != nil {
+			if err := applyZones(zones, func(z byte) error { return dev.SetBrightness(internal.StorageSaved, z, byte(val)) }); err != nil {
 				return err
 			}
 			fmt.Printf("Brightness set to %d (zone: %s)\n", val, *zoneName)
@@ -173,7 +176,7 @@ func run() (err error) {
 			if !ok {
 				return fmt.Errorf("unknown scroll mode %q (valid: tactile, free, smart)", modeName)
 			}
-			if err := dev.SetScrollMode(mode); err != nil {
+			if err := dev.SetScrollMode(internal.StorageSaved, mode); err != nil {
 				return err
 			}
 			fmt.Printf("Scroll mode set to %s\n", modeName)
@@ -248,6 +251,74 @@ func runList() error {
 	return nil
 }
 
+func runStatus(dev *internal.Device) error {
+	// Read current live settings from volatile storage (0x00).
+	// This always reflects what is currently active on the hardware,
+	// regardless of which profile slot the hardware button is pointing at.
+	scrollModeNames := map[byte]string{
+		internal.ScrollTactile:   "tactile",
+		internal.ScrollFreeSpin:  "free-spin",
+		internal.ScrollSmartReel: "smart-reel",
+	}
+
+	fmt.Println("Current settings (active profile):")
+	fmt.Println()
+	for _, zone := range internal.ZoneEach {
+		brightness, err := dev.GetBrightness(zone)
+		if err != nil {
+			return fmt.Errorf("zone 0x%02X brightness: %w", zone, err)
+		}
+		effect, err := dev.GetEffect(internal.StorageVarStore, zone)
+		if err != nil {
+			// Non-fatal: show brightness only if effect read fails.
+			fmt.Fprintf(os.Stderr, "warning: zone 0x%02X effect: %v\n", zone, err)
+		}
+		zoneName := internal.ZoneNameByID[zone]
+		fmt.Printf("  %-10s  brightness=%3d  %s\n", zoneName, brightness, formatEffect(effect))
+	}
+
+	scrollMode, err := dev.GetScrollMode()
+	if err != nil {
+		return fmt.Errorf("scroll mode: %w", err)
+	}
+	scrollName := scrollModeNames[scrollMode]
+	if scrollName == "" {
+		scrollName = fmt.Sprintf("unknown(0x%02X)", scrollMode)
+	}
+	fmt.Printf("  %-10s  %s\n", "scroll", scrollName)
+	return nil
+}
+
+// formatEffect converts an EffectInfo into a human-readable string.
+func formatEffect(e internal.EffectInfo) string {
+	switch e.EffectID {
+	case internal.EffectStatic:
+		c := e.Colors[0]
+		return fmt.Sprintf("static #%02X%02X%02X", c[0], c[1], c[2])
+	case internal.EffectBreathing:
+		switch e.ColorCount {
+		case 1:
+			c := e.Colors[0]
+			return fmt.Sprintf("breathing #%02X%02X%02X", c[0], c[1], c[2])
+		case 2:
+			c1, c2 := e.Colors[0], e.Colors[1]
+			return fmt.Sprintf("breathing-dual #%02X%02X%02X / #%02X%02X%02X",
+				c1[0], c1[1], c1[2], c2[0], c2[1], c2[2])
+		default:
+			return "breathing (random)"
+		}
+	case internal.EffectSpectrum:
+		return "spectrum"
+	case internal.EffectReactive:
+		c := e.Colors[0]
+		return fmt.Sprintf("reactive #%02X%02X%02X speed=%d", c[0], c[1], c[2], e.Speed)
+	case internal.EffectNone:
+		return "off"
+	default:
+		return fmt.Sprintf("unknown(0x%02X)", e.EffectID)
+	}
+}
+
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 func printUsage() {
@@ -257,7 +328,7 @@ Usage:
   bmouse <command> [--zone <zone>] [args...]
 
 Commands:
-  list                           List all Razer HID devices
+  status                          Show current active-profile settings
   static       <hex-color>       Set a solid color           e.g. static ff0000
   breathe      <hex-color>       Single-color breathing      e.g. breathe 00ff00
   breathe-dual <color1> <color2> Two-color breathing         e.g. breathe-dual ff0000 0000ff
@@ -268,13 +339,12 @@ Commands:
   brightness   [0-255]           Get or set brightness
   scroll       [mode]            Get or set scroll wheel mode
                                    Modes: tactile, free, smart
+  list                           List all Razer HID devices
   version                        Print version and build info
 
-Zones (optional --zone flag, default all):
-  all      All LEDs at once
-  scroll   Scroll-wheel LED
-  logo     Logo LED
-  under    Underglow light strip
+Flags:
+  --zone <zone>      LED zone: all (default), scroll, logo, under
+  --speed <1-3>      Reactive duration: 1=short  2=medium  3=long
 
 color format:
   6-digit hex, with or without leading '#':  ff8800  or  #ff8800
@@ -287,9 +357,11 @@ Examples:
   bmouse spectrum
   bmouse off --zone scroll
   bmouse brightness 200
+  bmouse brightness                      (show current brightness per zone)
   bmouse scroll tactile
   bmouse scroll free
-  bmouse scroll smart`)
+  bmouse scroll smart
+  bmouse status                          (show all current settings)`)
 }
 
 // resolveZones converts a zone name to a slice of zone bytes.
