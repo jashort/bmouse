@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jashort/bmouse/internal"
+	"github.com/spf13/pflag"
 )
 
 func main() {
@@ -36,18 +36,24 @@ func run() (err error) {
 	}
 
 	// Build a FlagSet shared by all subcommands.
-	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
+	fs := pflag.NewFlagSet(cmd, pflag.ContinueOnError)
 	fs.Usage = printUsage
 
 	zoneName := fs.String("zone", "all", "LED zone: all, scroll, logo, under")
 	speed := fs.Int("speed", 2, "Reactive speed: 1=short 2=medium 3=long")
+	brightnessFlag := fs.Int("brightness", 255, "LED brightness 0-255")
 
 	if err := fs.Parse(os.Args[2:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, pflag.ErrHelp) {
 			return nil
 		}
 		return err
 	}
+
+	if *brightnessFlag < 0 || *brightnessFlag > 255 {
+		return fmt.Errorf("--brightness must be between 0 and 255")
+	}
+	brightness := byte(*brightnessFlag)
 
 	zones, err := resolveZones(*zoneName)
 	if err != nil {
@@ -73,20 +79,26 @@ func run() (err error) {
 		if err != nil {
 			return err
 		}
+		if err := applyZones(zones, func(z byte) error { return dev.SetBrightness(internal.StorageSaved, z, brightness) }); err != nil {
+			return err
+		}
 		if err := applyZones(zones, func(z byte) error { return dev.SetStatic(internal.StorageSaved, z, r, g, b) }); err != nil {
 			return err
 		}
-		fmt.Printf("Static #%02X%02X%02X (zone: %s)\n", r, g, b, *zoneName)
+		fmt.Printf("Static #%02X%02X%02X brightness=%d (zone: %s)\n", r, g, b, brightness, *zoneName)
 
 	case "breathe", "breathing":
 		r, g, b, err := parseColor(args, cmd)
 		if err != nil {
 			return err
 		}
+		if err := applyZones(zones, func(z byte) error { return dev.SetBrightness(internal.StorageSaved, z, brightness) }); err != nil {
+			return err
+		}
 		if err := applyZones(zones, func(z byte) error { return dev.SetBreathing(internal.StorageSaved, z, r, g, b) }); err != nil {
 			return err
 		}
-		fmt.Printf("Breathing #%02X%02X%02X (zone: %s)\n", r, g, b, *zoneName)
+		fmt.Printf("Breathing #%02X%02X%02X brightness=%d (zone: %s)\n", r, g, b, brightness, *zoneName)
 
 	case "breathe-dual", "breathing-dual":
 		if len(args) < 2 {
@@ -100,18 +112,24 @@ func run() (err error) {
 		if err != nil {
 			return err
 		}
+		if err := applyZones(zones, func(z byte) error { return dev.SetBrightness(internal.StorageSaved, z, brightness) }); err != nil {
+			return err
+		}
 		if err := applyZones(zones, func(z byte) error {
 			return dev.SetBreathingDual(internal.StorageSaved, z, r1, g1, b1, r2, g2, b2)
 		}); err != nil {
 			return err
 		}
-		fmt.Printf("Breathing dual #%02X%02X%02X / #%02X%02X%02X (zone: %s)\n", r1, g1, b1, r2, g2, b2, *zoneName)
+		fmt.Printf("Breathing dual #%02X%02X%02X / #%02X%02X%02X brightness=%d (zone: %s)\n", r1, g1, b1, r2, g2, b2, brightness, *zoneName)
 
 	case "spectrum", "rainbow":
+		if err := applyZones(zones, func(z byte) error { return dev.SetBrightness(internal.StorageSaved, z, brightness) }); err != nil {
+			return err
+		}
 		if err := applyZones(zones, func(z byte) error { return dev.SetSpectrum(internal.StorageSaved, z) }); err != nil {
 			return err
 		}
-		fmt.Printf("Spectrum cycling (zone: %s)\n", *zoneName)
+		fmt.Printf("Spectrum cycling brightness=%d (zone: %s)\n", brightness, *zoneName)
 
 	case "reactive":
 		if *speed < 1 || *speed > 3 {
@@ -121,38 +139,21 @@ func run() (err error) {
 		if err != nil {
 			return err
 		}
+		if err := applyZones(zones, func(z byte) error { return dev.SetBrightness(internal.StorageSaved, z, brightness) }); err != nil {
+			return err
+		}
 		if err := applyZones(zones, func(z byte) error {
 			return dev.SetReactive(internal.StorageSaved, z, byte(*speed), r, g, b)
 		}); err != nil {
 			return err
 		}
-		fmt.Printf("Reactive #%02X%02X%02X speed=%d (zone: %s)\n", r, g, b, *speed, *zoneName)
+		fmt.Printf("Reactive #%02X%02X%02X brightness=%d speed=%d (zone: %s)\n", r, g, b, brightness, *speed, *zoneName)
 
 	case "off":
 		if err := applyZones(zones, func(z byte) error { return dev.SetOff(internal.StorageSaved, z) }); err != nil {
 			return err
 		}
 		fmt.Printf("LEDs off (zone: %s)\n", *zoneName)
-
-	case "brightness":
-		if len(args) == 0 {
-			for _, z := range internal.ZoneEach {
-				b, err := dev.GetBrightness(z)
-				if err != nil {
-					return err
-				}
-				fmt.Printf("Zone 0x%02X brightness: %d/255\n", z, b)
-			}
-		} else {
-			val, err := parseInt(args[0], "brightness value 0-255")
-			if err != nil {
-				return err
-			}
-			if err := applyZones(zones, func(z byte) error { return dev.SetBrightness(internal.StorageSaved, z, byte(val)) }); err != nil {
-				return err
-			}
-			fmt.Printf("Brightness set to %d (zone: %s)\n", val, *zoneName)
-		}
 
 	case "scroll":
 		if len(args) == 0 {
@@ -325,10 +326,10 @@ func printUsage() {
 	fmt.Println(`bmouse — Razer Basilisk V3 Pro LED control (direct USB HID)
 
 Usage:
-  bmouse <command> [--zone <zone>] [args...]
+  bmouse <command> [--zone <zone>] [--brightness <n>] [args...]
 
 Commands:
-  status                          Show current active-profile settings
+  status                         Show current settings
   static       <hex-color>       Set a solid color           e.g. static ff0000
   breathe      <hex-color>       Single-color breathing      e.g. breathe 00ff00
   breathe-dual <color1> <color2> Two-color breathing         e.g. breathe-dual ff0000 0000ff
@@ -336,32 +337,31 @@ Commands:
   reactive     <hex-color>       Lights up on click
                [--speed 1-3]       1=short  2=medium(default)  3=long
   off                            Turn LEDs off
-  brightness   [0-255]           Get or set brightness
   scroll       [mode]            Get or set scroll wheel mode
                                    Modes: tactile, free, smart
   list                           List all Razer HID devices
   version                        Print version and build info
 
 Flags:
-  --zone <zone>      LED zone: all (default), scroll, logo, under
-  --speed <1-3>      Reactive duration: 1=short  2=medium  3=long
+  --zone <zone>         LED zone: all (default), scroll, logo, under
+  --brightness <0-255>  LED brightness (default 255)
+  --speed <1-3>         Reactive duration: 1=short  2=medium  3=long
 
 color format:
   6-digit hex, with or without leading '#':  ff8800  or  #ff8800
 
 Examples:
   bmouse static ff0000
+  bmouse static ff0000 --brightness 128
   bmouse breathe --zone logo 00ff88
   bmouse breathe-dual ff0000 0000ff
   bmouse reactive ff0000 --speed 1
-  bmouse spectrum
+  bmouse spectrum --brightness 200
   bmouse off --zone scroll
-  bmouse brightness 200
-  bmouse brightness                      (show current brightness per zone)
   bmouse scroll tactile
   bmouse scroll free
   bmouse scroll smart
-  bmouse status                          (show all current settings)`)
+  bmouse status`)
 }
 
 // resolveZones converts a zone name to a slice of zone bytes.

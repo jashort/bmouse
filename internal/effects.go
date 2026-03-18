@@ -75,22 +75,11 @@ type EffectInfo struct {
 	Colors     [2][3]byte // up to two RGB triples
 }
 
-// ─── Internal helpers ────────────────────────────────────────────────────────
-
-// ensureBrightness sets brightness to 255 for the given zone and storage slot.
-// The V3 Pro requires brightness to be set before an effect is visible.
-func (d *Device) ensureBrightness(storage, zone byte) error {
-	return d.SetBrightness(storage, zone, 0xFF)
-}
-
 // ─── High-level effect methods ───────────────────────────────────────────────
 
 // SetStatic sets a zone to a fixed RGB color.
 // Use StorageVarStore for a temporary change, or StorageSaved to persist across power cycles.
 func (d *Device) SetStatic(storage, zone, r, g, b byte) error {
-	if err := d.ensureBrightness(storage, zone); err != nil {
-		return err
-	}
 	pkt := NewPacket(ClassLED, CmdSetEffect, 0x09)
 	pkt.Args[0] = storage
 	pkt.Args[1] = zone
@@ -110,9 +99,6 @@ func (d *Device) SetStaticAll(storage, r, g, b byte) error {
 
 // SetBreathing sets a single-color breathing (pulsing) effect.
 func (d *Device) SetBreathing(storage, zone, r, g, b byte) error {
-	if err := d.ensureBrightness(storage, zone); err != nil {
-		return err
-	}
 	pkt := NewPacket(ClassLED, CmdSetEffect, 0x09)
 	pkt.Args[0] = storage
 	pkt.Args[1] = zone
@@ -127,9 +113,6 @@ func (d *Device) SetBreathing(storage, zone, r, g, b byte) error {
 
 // SetBreathingDual sets a two-color breathing effect.
 func (d *Device) SetBreathingDual(storage, zone, r1, g1, b1, r2, g2, b2 byte) error {
-	if err := d.ensureBrightness(storage, zone); err != nil {
-		return err
-	}
 	pkt := NewPacket(ClassLED, CmdSetEffect, 0x0C)
 	pkt.Args[0] = storage
 	pkt.Args[1] = zone
@@ -147,9 +130,6 @@ func (d *Device) SetBreathingDual(storage, zone, r1, g1, b1, r2, g2, b2 byte) er
 
 // SetBreathingRandom sets a random-color breathing effect.
 func (d *Device) SetBreathingRandom(storage, zone byte) error {
-	if err := d.ensureBrightness(storage, zone); err != nil {
-		return err
-	}
 	pkt := NewPacket(ClassLED, CmdSetEffect, 0x06)
 	pkt.Args[0] = storage
 	pkt.Args[1] = zone
@@ -161,9 +141,6 @@ func (d *Device) SetBreathingRandom(storage, zone byte) error {
 
 // SetSpectrum sets the spectrum cycling (rainbow) effect.
 func (d *Device) SetSpectrum(storage, zone byte) error {
-	if err := d.ensureBrightness(storage, zone); err != nil {
-		return err
-	}
 	pkt := NewPacket(ClassLED, CmdSetEffect, 0x06)
 	pkt.Args[0] = storage
 	pkt.Args[1] = zone
@@ -180,9 +157,6 @@ func (d *Device) SetSpectrumAll(storage byte) error {
 // SetReactive sets the reactive effect (lights up on click).
 // speed: 1=short, 2=medium, 3=long.
 func (d *Device) SetReactive(storage, zone, speed, r, g, b byte) error {
-	if err := d.ensureBrightness(storage, zone); err != nil {
-		return err
-	}
 	pkt := NewPacket(ClassLED, CmdSetEffect, 0x09)
 	pkt.Args[0] = storage
 	pkt.Args[1] = zone
